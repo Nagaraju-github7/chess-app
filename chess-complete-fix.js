@@ -478,7 +478,91 @@ class CompleteChessFix {
         return moves;
     }
 
+    // ===== MOVE NOTATION =====
+
+    generateMoveNotation(piece, fromRow, fromCol, toRow, toCol, capturedPiece) {
+        const pieceType = piece[1];
+        const files = 'abcdefgh';
+        const fromFile = files[fromCol];
+        const toFile = files[toCol];
+        const fromRank = 8 - fromRow;
+        const toRank = 8 - toRow;
+
+        let notation = '';
+
+        // Handle castling
+        if (pieceType === 'K' && Math.abs(toCol - fromCol) === 2) {
+            if (toCol > fromCol) {
+                return 'O-O';
+            } else {
+                return 'O-O-O';
+            }
+        }
+
+        // Piece symbol (pawns don't get a symbol)
+        if (pieceType !== 'P') {
+            notation += pieceType;
+        }
+
+        // For pawns, show the file if capturing
+        if (pieceType === 'P' && capturedPiece) {
+            notation += fromFile;
+        }
+
+        // For other pieces, we might need to disambiguate if there are multiple pieces
+        // that can move to the same square (simplified version - just using file for now)
+        if (pieceType !== 'P' && pieceType !== 'K') {
+            // Check if we need disambiguation (simplified)
+            notation += fromFile;
+        }
+
+        // Capture symbol
+        if (capturedPiece) {
+            notation += 'x';
+        }
+
+        // Destination square
+        notation += toFile + toRank;
+
+        return notation;
+    }
+
+    printMoveHistory() {
+        let pgn = '';
+
+        for (let i = 0; i < this.moveHistory.length; i += 2) {
+            const moveNumber = (i / 2) + 1;
+            const whiteMove = this.moveHistory[i] || "";
+            const blackMove = this.moveHistory[i + 1] || "";
+            pgn += moveNumber + ". " + whiteMove + " " + blackMove + "<br>";
+        }
+
+        const panel = document.getElementById("move-list");
+
+        if (panel) {
+            panel.innerHTML = pgn;
+        }
+    }
+
     // ===== GAME STATE DETECTION =====
+
+    isOnlyKingsLeft() {
+        let pieceCount = 0;
+
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = this.board[row][col];
+                if (piece) {
+                    if (piece !== "wK" && piece !== "bK") {
+                        return false;
+                    }
+                    pieceCount++;
+                }
+            }
+        }
+
+        return pieceCount === 2;
+    }
 
     isCheckmate(color) {
         console.log(`🔍 CHECKING CHECKMATE for ${color}`);
@@ -706,6 +790,19 @@ class CompleteChessFix {
                     this.board[toRow][toCol] = piece[0] + choice;
                     console.log(`♟ Pawn promoted to ${choice}`);
 
+                    // Save promotion move in PGN format
+                    const notation = this.generateMoveNotation(
+                        piece[0] + choice,
+                        fromRow,
+                        fromCol,
+                        toRow,
+                        toCol,
+                        capturedPiece
+                    );
+
+                    this.moveHistory.push(notation);
+                    this.printMoveHistory();
+
                     // Continue with game updates after promotion
                     this.currentPlayer = this.currentPlayer === 'white' ? 'black' : 'white';
 
@@ -817,6 +914,19 @@ class CompleteChessFix {
             return;
         }
 
+        // Save move in PGN format
+        const notation = this.generateMoveNotation(
+            piece,
+            fromRow,
+            fromCol,
+            toRow,
+            toCol,
+            capturedPiece
+        );
+
+        this.moveHistory.push(notation);
+        this.printMoveHistory();
+
         this.clearSelection();
         this.setupBoard();
         this.updateGameStatus();
@@ -862,6 +972,11 @@ class CompleteChessFix {
     checkGameState() {
         // This is called after every move
         console.log(`🎮 Checking game state for ${this.currentPlayer}`);
+
+        if (this.isOnlyKingsLeft()) {
+            this.showGameOver("Draw — Only Kings Remaining");
+            return;
+        }
 
         const isCheck = this.isKingInCheck(this.currentPlayer);
         const isCheckmate = this.isCheckmate(this.currentPlayer);
