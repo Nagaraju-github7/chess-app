@@ -26,6 +26,9 @@ class CompleteChessFix {
             blackRookLeft: false,
             blackRookRight: false
         };
+        this.enPassantTarget = null;
+        this.positionHistory = {};
+        this.halfMoveClock = 0;
 
         console.log('Game initialized');
         this.setupBoard();
@@ -329,6 +332,16 @@ class CompleteChessFix {
             }
         });
 
+        // En passant captures
+        if (this.enPassantTarget) {
+            const epRow = this.enPassantTarget.row;
+            const epCol = this.enPassantTarget.col;
+
+            if (Math.abs(epCol - col) === 1 && epRow === row + direction) {
+                moves.push({ row: epRow, col: epCol, enPassant: true });
+            }
+        }
+
         return moves;
     }
 
@@ -494,6 +507,26 @@ class CompleteChessFix {
         return true;
     }
 
+    isStalemate(color) {
+        if (this.isKingInCheck(color)) {
+            return false;
+        }
+
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = this.board[row][col];
+                if (piece && this.isCurrentPlayerPiece(piece)) {
+                    const moves = this.getLegalMoves(row, col);
+                    if (moves.length > 0) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
     isInBounds(row, col) {
         return row >= 0 && row < 8 && col >= 0 && col < 8;
     }
@@ -622,6 +655,31 @@ class CompleteChessFix {
         this.selectedSquare = null;
     }
 
+    showPromotionUI(color, callback) {
+        const overlay = document.createElement('div');
+        overlay.className = 'promotion-overlay';
+
+        const pieces = ['Q', 'R', 'B', 'N'];
+
+        overlay.innerHTML = `
+            <div class="promotion-box">
+                <h3>Choose Promotion</h3>
+                ${pieces.map(p =>
+            `<button data-piece="${p}">${color}${p}</button>`
+        ).join('')}
+            </div>
+        `;
+
+        overlay.querySelectorAll('button').forEach(btn => {
+            btn.onclick = () => {
+                callback(btn.dataset.piece);
+                document.body.removeChild(overlay);
+            };
+        });
+
+        document.body.appendChild(overlay);
+    }
+
     isValidMove(fromRow, fromCol, toRow, toCol) {
         const legalMoves = this.getLegalMoves(fromRow, fromCol);
         return legalMoves.some(move => move.row === toRow && move.col === toCol);
@@ -642,22 +700,36 @@ class CompleteChessFix {
             const promotionRow = isWhite ? 0 : 7;
 
             if (toRow === promotionRow) {
+                // Use async promotion UI instead of prompt
+                const color = isWhite ? 'w' : 'b';
+                this.showPromotionUI(color, (choice) => {
+                    this.board[toRow][toCol] = piece[0] + choice;
+                    console.log(`♟ Pawn promoted to ${choice}`);
 
-                let choice = prompt("Promote pawn to: Q (Queen), R (Rook), B (Bishop), N (Knight)", "Q");
+                    // Continue with game updates after promotion
+                    this.currentPlayer = this.currentPlayer === 'white' ? 'black' : 'white';
 
-                if (!choice) choice = "Q";
+                    // Track position for threefold repetition
+                    const boardKey = JSON.stringify(this.board);
+                    this.positionHistory[boardKey] = (this.positionHistory[boardKey] || 0) + 1;
 
-                choice = choice.toUpperCase();
+                    if (this.positionHistory[boardKey] >= 3) {
+                        this.showGameOver("Draw by Threefold Repetition");
+                        return;
+                    }
 
-                const valid = ['Q', 'R', 'B', 'N'];
+                    // Check 50-move rule
+                    if (this.halfMoveClock >= 100) {
+                        this.showGameOver("Draw by 50-Move Rule");
+                        return;
+                    }
 
-                if (!valid.includes(choice)) {
-                    choice = 'Q';
-                }
-
-                this.board[toRow][toCol] = piece[0] + choice;
-
-                console.log(`♟ Pawn promoted to ${choice}`);
+                    this.clearSelection();
+                    this.setupBoard();
+                    this.updateGameStatus();
+                    this.checkGameState();
+                });
+                return; // Exit early to wait for promotion choice
             }
         }
 
@@ -693,12 +765,57 @@ class CompleteChessFix {
             console.log("Castling performed");
         }
 
+        // Update en passant target
+        if (piece[1] === 'P' && Math.abs(toRow - fromRow) === 2) {
+            this.enPassantTarget = {
+                row: (fromRow + toRow) / 2,
+                col: fromCol
+            };
+        } else {
+            this.enPassantTarget = null;
+        }
+
+        // Handle en passant capture
+        if (piece[1] === 'P' && this.enPassantTarget && toRow === this.enPassantTarget.row && toCol === this.enPassantTarget.col && !capturedPiece) {
+            const capturedRow = piece[0] === 'w' ? toRow + 1 : toRow - 1;
+            const capturedPawn = this.board[capturedRow][toCol];
+            this.board[capturedRow][toCol] = null;
+
+            if (capturedPawn) {
+                const capturedColor = capturedPawn[0] === 'w' ? 'white' : 'black';
+                this.capturedPieces[capturedColor].push(capturedPawn);
+                console.log(`En passant capture: ${capturedPawn}`);
+            }
+        }
+
+        // Update half-move clock for 50-move rule
+        if (piece[1] === 'P' || capturedPiece) {
+            this.halfMoveClock = 0;
+        } else {
+            this.halfMoveClock++;
+        }
+
         if (capturedPiece) {
             const capturedColor = capturedPiece[0] === 'w' ? 'white' : 'black';
             this.capturedPieces[capturedColor].push(capturedPiece);
         }
 
         this.currentPlayer = this.currentPlayer === 'white' ? 'black' : 'white';
+
+        // Track position for threefold repetition
+        const boardKey = JSON.stringify(this.board);
+        this.positionHistory[boardKey] = (this.positionHistory[boardKey] || 0) + 1;
+
+        if (this.positionHistory[boardKey] >= 3) {
+            this.showGameOver("Draw by Threefold Repetition");
+            return;
+        }
+
+        // Check 50-move rule
+        if (this.halfMoveClock >= 100) {
+            this.showGameOver("Draw by 50-Move Rule");
+            return;
+        }
 
         this.clearSelection();
         this.setupBoard();
@@ -724,11 +841,15 @@ class CompleteChessFix {
 
         const isCheck = this.isKingInCheck(this.currentPlayer);
         const isCheckmate = this.isCheckmate(this.currentPlayer);
+        const isStalemate = this.isStalemate(this.currentPlayer);
 
         if (isCheckmate) {
             const winner = this.currentPlayer === 'white' ? 'Black' : 'White';
             document.getElementById('game-status').textContent = `CHECKMATE! ${winner} wins!`;
             document.getElementById('game-status').style.color = '#e74c3c';
+        } else if (isStalemate) {
+            document.getElementById('game-status').textContent = "Stalemate — Draw";
+            document.getElementById('game-status').style.color = '#f39c12';
         } else if (isCheck) {
             document.getElementById('game-status').textContent = `${this.currentPlayer} is in check`;
             document.getElementById('game-status').style.color = '#e74c3c';
