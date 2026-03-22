@@ -596,6 +596,31 @@ class CompleteChessFix {
         this.board[toRow][toCol] = piece;
         this.board[fromRow][fromCol] = null;
 
+        if (piece[1] === 'P') {
+
+            const isWhite = piece[0] === 'w';
+            const promotionRow = isWhite ? 0 : 7;
+
+            if (toRow === promotionRow) {
+
+                let choice = prompt("Promote pawn to: Q (Queen), R (Rook), B (Bishop), N (Knight)", "Q");
+
+                if (!choice) choice = "Q";
+
+                choice = choice.toUpperCase();
+
+                const valid = ['Q', 'R', 'B', 'N'];
+
+                if (!valid.includes(choice)) {
+                    choice = 'Q';
+                }
+
+                this.board[toRow][toCol] = piece[0] + choice;
+
+                console.log(`♟ Pawn promoted to ${choice}`);
+            }
+        }
+
         if (piece[1] === 'K') {
             this.kingPositions[this.currentPlayer] = { row: toRow, col: toCol };
         }
