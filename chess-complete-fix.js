@@ -18,6 +18,14 @@ class CompleteChessFix {
         this.capturedPieces = { white: [], black: [] };
         this.lastMove = null;
         this.kingPositions = { white: { row: 7, col: 4 }, black: { row: 0, col: 4 } };
+        this.hasMoved = {
+            whiteKing: false,
+            blackKing: false,
+            whiteRookLeft: false,
+            whiteRookRight: false,
+            blackRookLeft: false,
+            blackRookRight: false
+        };
 
         console.log('Game initialized');
         this.setupBoard();
@@ -422,6 +430,38 @@ class CompleteChessFix {
             }
         });
 
+        const piece = this.board[row][col];
+        const isWhite = piece[0] === 'w';
+
+        if (!this.isKingInCheck(this.currentPlayer)) {
+
+            // KING SIDE CASTLE
+            if (isWhite && !this.hasMoved.whiteKing && !this.hasMoved.whiteRookRight) {
+                if (!this.board[7][5] && !this.board[7][6]) {
+                    moves.push({ row: 7, col: 6, castle: 'king' });
+                }
+            }
+
+            if (!isWhite && !this.hasMoved.blackKing && !this.hasMoved.blackRookRight) {
+                if (!this.board[0][5] && !this.board[0][6]) {
+                    moves.push({ row: 0, col: 6, castle: 'king' });
+                }
+            }
+
+            // QUEEN SIDE CASTLE
+            if (isWhite && !this.hasMoved.whiteKing && !this.hasMoved.whiteRookLeft) {
+                if (!this.board[7][1] && !this.board[7][2] && !this.board[7][3]) {
+                    moves.push({ row: 7, col: 2, castle: 'queen' });
+                }
+            }
+
+            if (!isWhite && !this.hasMoved.blackKing && !this.hasMoved.blackRookLeft) {
+                if (!this.board[0][1] && !this.board[0][2] && !this.board[0][3]) {
+                    moves.push({ row: 0, col: 2, castle: 'queen' });
+                }
+            }
+        }
+
         return moves;
     }
 
@@ -623,6 +663,34 @@ class CompleteChessFix {
 
         if (piece[1] === 'K') {
             this.kingPositions[this.currentPlayer] = { row: toRow, col: toCol };
+        }
+
+        // Update movement flags for castling
+        if (piece === 'wK') this.hasMoved.whiteKing = true;
+        if (piece === 'bK') this.hasMoved.blackKing = true;
+
+        if (piece === 'wR' && fromCol === 0 && fromRow === 7) this.hasMoved.whiteRookLeft = true;
+        if (piece === 'wR' && fromCol === 7 && fromRow === 7) this.hasMoved.whiteRookRight = true;
+
+        if (piece === 'bR' && fromCol === 0 && fromRow === 0) this.hasMoved.blackRookLeft = true;
+        if (piece === 'bR' && fromCol === 7 && fromRow === 0) this.hasMoved.blackRookRight = true;
+
+        // Move rook during castling
+        if (piece[1] === 'K' && Math.abs(toCol - fromCol) === 2) {
+
+            if (toCol === 6) { // king side
+                const rook = this.board[toRow][7];
+                this.board[toRow][5] = rook;
+                this.board[toRow][7] = null;
+            }
+
+            if (toCol === 2) { // queen side
+                const rook = this.board[toRow][0];
+                this.board[toRow][3] = rook;
+                this.board[toRow][0] = null;
+            }
+
+            console.log("Castling performed");
         }
 
         if (capturedPiece) {
