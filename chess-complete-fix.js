@@ -150,8 +150,14 @@ class CompleteChessFix {
                 return (fromRow === toRow || fromCol === toCol) && this.isPathClear(fromRow, fromCol, toRow, toCol);
 
             case 'Q':
-                return this.canPieceAttack(fromRow, fromCol, toRow, toCol, { type: 'R' }) ||
-                    this.canPieceAttack(fromRow, fromCol, toRow, toCol, { type: 'B' });
+                // Queen moves like rook or bishop
+                const rookMove = (fromRow === toRow || fromCol === toCol) &&
+                    this.isPathClear(fromRow, fromCol, toRow, toCol);
+
+                const bishopMove = (rowDiff === colDiff) &&
+                    this.isPathClear(fromRow, fromCol, toRow, toCol);
+
+                return rookMove || bishopMove;
 
             case 'K':
                 return rowDiff <= 1 && colDiff <= 1;
